@@ -1,0 +1,92 @@
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+/* dvh = dynamic viewport height: tracks the real visible area on phones,
+   where the browser chrome slides in and out. Plain 100vh would leave the
+   HUD's bottom buttons hiding behind Safari's toolbar. */
+#root {
+  height: 100vh;
+  height: 100dvh;
+}
+
+body {
+  overflow: hidden;
+  background: #0b0e14;
+  overscroll-behavior: none; /* no pull-to-refresh over the game */
+}
+
+.scene-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.scene {
+  width: 100%;
+  height: 100%;
+}
+
+/* The HUD floats above the canvas. pointer-events: none lets touches fall
+   through to the canvas — except on the elements that opt back IN below. */
+.hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  color: #e2e8f0;
+}
+
+/* max(..., env(safe-area-inset-*)) keeps HUD elements out of notches and
+   home-indicator zones on phones; on desktop the inset is 0 and the plain
+   padding wins. */
+.score {
+  position: absolute;
+  top: max(16px, env(safe-area-inset-top));
+  left: max(20px, env(safe-area-inset-left));
+  font-size: 18px;
+  letter-spacing: 0.08em;
+  opacity: 0.9;
+}
+
+.game-over {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(11, 14, 20, 0.55);
+  border: none;
+  font: inherit;
+  color: inherit;
+  pointer-events: auto;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.best {
+  margin-left: 14px;
+  opacity: 0.55;
+  font-size: 15px;
+}
+
+.game-over-title {
+  font-size: 42px;
+  letter-spacing: 0.12em;
+  color: #fca5a5;
+}
+
+.game-over-score {
+  font-size: 17px;
+  opacity: 0.9;
+}
+
+.game-over-hint {
+  font-size: 15px;
+  opacity: 0.8;
+}

@@ -1,0 +1,14 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dev",
+      "runtimeExecutable": "zsh",
+      "runtimeArgs": [
+        "-c",
+        "PATH=$HOME/.nvm/versions/node/v24.18.0/bin:$PATH pnpm dev"
+      ],
+      "port": 5173
+    }
+  ]
+}
