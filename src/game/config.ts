@@ -4,14 +4,14 @@
 
 // Cells per side of the (cubic) arena. Odd, so one cell sits dead center —
 // a natural spawn point for the snake.
-export const GRID_SIZE = 50;
+export const GRID_SIZE = 40;
 
 // Edge length of one cell in world units. Everything visual is sized off
 // this, so changing it rescales the whole game consistently.
 export const CELL = 1;
 
 // Snake speed, in steps per second — THE knob for game pace.
-export const SPEED = 5;
+export const SPEED = 4;
 
 // Seconds between game ticks, derived from SPEED — the snake takes one
 // step per tick.
@@ -20,7 +20,7 @@ export const TICK_SECONDS = 1 / SPEED;
 // Progressive difficulty: the first SPEED_GRACE_FOOD pickups play at the
 // base SPEED (the settling-in period), then every further food adds
 // SPEED_GROWTH_PER_FOOD, topping out at SPEED_MAX_MULTIPLIER × base.
-export const SPEED_GRACE_FOOD = 5;
+export const SPEED_GRACE_FOOD = 8;
 export const SPEED_GROWTH_PER_FOOD = 0.05;
 export const SPEED_MAX_MULTIPLIER = 2;
 
@@ -39,7 +39,12 @@ export function speedForScore(score: number): number {
 // Wall proximity: how much reaction time the player gets before reaching
 // a wall. The warning distance is derived from this and the CURRENT
 // speed, so a faster game automatically warns further ahead.
-export const WALL_WARN_SECONDS = 1.2;
+export const WALL_WARN_SECONDS = 1;
+
+// Depth cue: a thin line from the food straight down to the floor, with a
+// dot where it lands — reads the food's height and floor position at a
+// glance. Matter of taste; flip it off for a cleaner arena.
+export const FOOD_DROP_LINE = false;
 
 // Wall behavior — flip to taste, everything else adapts:
 //   "solid"  → touching a wall is game over (classic hard mode)

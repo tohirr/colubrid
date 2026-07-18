@@ -47,10 +47,19 @@ const KEY_TO_INTENT: Record<string, MoveIntent> = {
 export function attachInput(
   onIntent: (intent: MoveIntent) => void,
   onRestart: () => void,
+  onPauseToggle: () => void,
 ): () => void {
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.code === "KeyR" || e.key.toLowerCase() === "r") {
       onRestart();
+      return;
+    }
+    if (
+      e.code === "KeyP" ||
+      e.key.toLowerCase() === "p" ||
+      e.key === "Escape"
+    ) {
+      onPauseToggle();
       return;
     }
     const intent = CODE_TO_INTENT[e.code] ?? KEY_TO_INTENT[e.key];

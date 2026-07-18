@@ -3,6 +3,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import {
   GRID_SIZE,
   CELL,
+  FOOD_DROP_LINE,
   WALL_MODE,
   WALL_WARN_SECONDS,
   cellToWorld,
@@ -35,11 +36,13 @@ if (import.meta.hot) {
 export interface SceneEvents {
   onScore: (score: number) => void;
   onStatus: (status: GameStatus) => void;
+  onPause: (paused: boolean) => void;
 }
 
 // ...and how React talks INTO the 3D world: the handle initScene returns.
 export interface SceneHandle {
   restart: () => void;
+  togglePause: () => void;
   dispose: () => void;
 }
 
@@ -56,15 +59,40 @@ export function initScene(
   // derive from this, so changing GRID_SIZE rescales everything.
   const bounds = GRID_SIZE * CELL;
 
-  // 2. The CAMERA. Pulled back proportionally to the arena size, slightly
-  //    above the horizon so the floor grid reads in perspective.
+  // 2. The CAMERA. Pulled back far enough to frame the whole arena FOR
+  //    THE CURRENT SCREEN SHAPE, slightly above the horizon so the floor
+  //    grid reads in perspective.
   const camera = new THREE.PerspectiveCamera(
     60,
     container.clientWidth / container.clientHeight,
     0.1,
     bounds * 10,
   );
-  camera.position.set(bounds * 1.1, bounds * 0.8, bounds * 1.35);
+
+  // PORTRAIT-AWARE FRAMING. `fov` is the VERTICAL field of view; the
+  // horizontal one follows from the aspect ratio. Compute the distance
+  // that fits the arena vertically and the distance that fits it
+  // horizontally, and stand back by whichever is larger — on a tall
+  // phone screen the horizontal constraint wins, on a wide monitor the
+  // vertical one does.
+  const fitDistance = () => {
+    const aspect = container.clientWidth / container.clientHeight;
+    const fovV = THREE.MathUtils.degToRad(camera.fov);
+    const fovH = 2 * Math.atan(Math.tan(fovV / 2) * aspect);
+    // Fit the arena's bounding SPHERE, not its front face: the camera
+    // orbits freely, so the arena must fit at every rotation — and at a
+    // 3/4 view the binding width is the cube's diagonal, not its side.
+    // A sphere of radius r fits fully when distance ≥ r / sin(halfFov),
+    // measured on whichever axis (vertical/horizontal) is tighter.
+    const radius = (bounds / 2) * Math.sqrt(3);
+    const halfFov = Math.min(fovV, fovH) / 2;
+    return (radius / Math.sin(halfFov)) * 1.02;
+  };
+
+  camera.position
+    .set(1.1, 0.8, 1.35) // the direction of the classic 3/4 view...
+    .normalize()
+    .multiplyScalar(fitDistance()); // ...at whatever distance fits
   camera.lookAt(0, 0, 0);
 
   // 3. The RENDERER draws the scene, from the camera's point of view,
@@ -80,8 +108,8 @@ export function initScene(
   controls.target.set(0, 0, 0);
   controls.enableDamping = true;
   controls.enablePan = false; // keep the arena centered — orbit + zoom only
-  controls.minDistance = bounds * 0.8;
-  controls.maxDistance = bounds * 3;
+  controls.minDistance = bounds * 0.6;
+  controls.maxDistance = fitDistance() * 2.2;
   // Keep the camera off the exact poles: looking straight down leaves no
   // usable screen direction for two of the axes, and steering degrades.
   controls.minPolarAngle = 0.15;
@@ -195,6 +223,44 @@ export function initScene(
     }),
   );
   scene.add(food);
+
+  // The DROP-LINE (optional, see config): a thin vertical line from the
+  // food to the floor plus a dot where it lands. The dot gives you the
+  // food's floor position, the line's length gives you its height — the
+  // two readings that a lone floating object can't communicate. The line
+  // is a unit segment (0,0,0)→(0,-1,0) that we position at the food and
+  // stretch with scale.y, so per-frame updates touch no geometry.
+  let dropLine: THREE.LineSegments | null = null;
+  let dropMarker: THREE.Mesh | null = null;
+  if (FOOD_DROP_LINE) {
+    const lineGeometry = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(0, -1, 0),
+    ]);
+    dropLine = new THREE.LineSegments(
+      lineGeometry,
+      new THREE.LineBasicMaterial({
+        color: 0xb45309,
+        transparent: true,
+        opacity: 0.6,
+      }),
+    );
+    scene.add(dropLine);
+
+    const marker = new THREE.Mesh(
+      new THREE.CircleGeometry(CELL * 0.3, 20),
+      new THREE.MeshBasicMaterial({
+        color: 0xf59e0b,
+        transparent: true,
+        opacity: 0.45,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      }),
+    );
+    marker.rotation.x = -Math.PI / 2; // lie flat on the floor
+    scene.add(marker);
+    dropMarker = marker;
+  }
   // ----------------------------------------------------------------------
 
   let game = createGame();
@@ -249,11 +315,27 @@ export function initScene(
     steerBySwipe(dx, dy);
   };
 
-  const restart = () => {
-    game = createGame(); // fresh world, same rules
+  // PAUSE is a loop concern, not a game rule: the game state never hears
+  // about it — the scene simply stops feeding it ticks. Rendering, the
+  // camera, and the gizmo all keep working, so a paused game is also a
+  // "free look around" mode.
+  let paused = false;
+  const setPaused = (next: boolean) => {
+    if (paused === next) return;
+    paused = next;
+    events.onPause(paused);
+  };
+  const togglePause = () => {
+    if (game.status === "dead") return; // nothing meaningful to pause
+    setPaused(!paused);
   };
 
-  const detachInput = attachInput(sendIntent, restart);
+  const restart = () => {
+    game = createGame(); // fresh world, same rules
+    setPaused(false);
+  };
+
+  const detachInput = attachInput(sendIntent, restart, togglePause);
   const detachTouch = attachTouch(renderer.domElement, steerBySwipe, (x, y) =>
     gizmo.containsPoint(x, y),
   );
@@ -369,7 +451,9 @@ export function initScene(
   }
 
   // Make the meshes match the state: one cube per segment, head tinted
-  // lighter. The pool grows/shrinks as the snake does.
+  // lighter. The pool grows/shrinks as the snake does. Rotation is reset
+  // because the death tumble (below) spins segments — a restart must
+  // hand back tidy cubes.
   const syncSnake = () => {
     while (snakeGroup.children.length < game.snake.length) {
       snakeGroup.add(new THREE.Mesh(segmentGeometry, bodyMaterial));
@@ -380,9 +464,77 @@ export function initScene(
     game.snake.forEach((cell, i) => {
       const mesh = snakeGroup.children[i] as THREE.Mesh;
       mesh.position.set(...cellToWorld(cell));
+      mesh.rotation.set(0, 0, 0);
       mesh.material = i === 0 ? headMaterial : bodyMaterial;
     });
   };
+
+  // ---- TRANSIENT EFFECTS ----------------------------------------------
+  // Juice: short-lived visuals that belong to no game state. Each effect
+  // is an object that advances itself per frame and reports when it's
+  // done; the loop disposes finished ones. The game rules never know.
+  interface Effect {
+    update(dt: number): boolean; // false = finished
+    dispose(): void;
+  }
+  const effects: Effect[] = [];
+
+  // Eating: the food flares up and dissolves at the spot it was eaten.
+  const spawnEatPop = (at: THREE.Vector3) => {
+    const material = new THREE.MeshBasicMaterial({
+      color: 0xfbbf24,
+      transparent: true,
+      opacity: 0.9,
+      depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(food.geometry, material); // shared geometry
+    mesh.position.copy(at);
+    scene.add(mesh);
+    let age = 0;
+    effects.push({
+      update(step) {
+        age += step;
+        const k = age / 0.3; // 0.3s of life
+        mesh.scale.setScalar(1 + k * 2.2);
+        mesh.rotation.y += step * 4;
+        material.opacity = Math.max(0, 0.9 * (1 - k));
+        return k < 1;
+      },
+      dispose() {
+        scene.remove(mesh);
+        material.dispose(); // geometry is the food's — not ours to free
+      },
+    });
+  };
+
+  // Death: the snake bursts apart — each pooled segment gets a fling
+  // velocity and a spin, then gravity does the storytelling. While this
+  // plays, syncSnake is suspended (it would snap the cubes back).
+  interface TumblingSegment {
+    mesh: THREE.Object3D;
+    velocity: THREE.Vector3;
+    spin: THREE.Vector3;
+  }
+  let deathTumble: { age: number; segments: TumblingSegment[] } | null = null;
+  const startDeathTumble = () => {
+    deathTumble = {
+      age: 0,
+      segments: snakeGroup.children.map((mesh) => ({
+        mesh,
+        velocity: new THREE.Vector3(
+          (Math.random() - 0.5) * 4,
+          2 + Math.random() * 3,
+          (Math.random() - 0.5) * 4,
+        ),
+        spin: new THREE.Vector3(
+          (Math.random() - 0.5) * 8,
+          (Math.random() - 0.5) * 8,
+          (Math.random() - 0.5) * 8,
+        ),
+      })),
+    };
+  };
+  // ----------------------------------------------------------------------
 
   // LIGHTS — two-light rig, the workhorse setup for stylized 3D:
   //
@@ -409,23 +561,29 @@ export function initScene(
   let unsimulatedTime = 0;
   let lastScore = -1;
   let lastStatus: GameStatus | null = null;
+  // Death is announced to React late, so the tumble animation gets its
+  // moment before the overlay drops in.
+  const DEATH_OVERLAY_DELAY = 0.8;
+  let deathNotifyIn: number | null = null;
   renderer.setAnimationLoop(() => {
     timer.update();
     const dt = timer.getDelta();
-    unsimulatedTime += dt;
-    // Tick length is DYNAMIC now: the game speeds up as the score grows
-    // (after a grace period), so we ask config for the current pace
-    // instead of using a constant.
-    const tickSeconds = 1 / speedForScore(game.score);
-    // Browsers stop firing animation frames entirely while the tab is
-    // hidden, so the first delta after returning can be minutes long —
-    // uncapped, the while-loop below would replay hundreds of ticks in one
-    // frame and the snake would die instantly. The cap turns "tab was
-    // hidden" into "game was paused."
-    unsimulatedTime = Math.min(unsimulatedTime, tickSeconds * 2);
-    while (unsimulatedTime >= tickSeconds) {
-      unsimulatedTime -= tickSeconds;
-      tick(game);
+    if (!paused) {
+      unsimulatedTime += dt;
+      // Tick length is DYNAMIC now: the game speeds up as the score grows
+      // (after a grace period), so we ask config for the current pace
+      // instead of using a constant.
+      const tickSeconds = 1 / speedForScore(game.score);
+      // Browsers stop firing animation frames entirely while the tab is
+      // hidden, so the first delta after returning can be minutes long —
+      // uncapped, the while-loop below would replay hundreds of ticks in
+      // one frame and the snake would die instantly. The cap turns "tab
+      // was hidden" into "game was paused."
+      unsimulatedTime = Math.min(unsimulatedTime, tickSeconds * 2);
+      while (unsimulatedTime >= tickSeconds) {
+        unsimulatedTime -= tickSeconds;
+        tick(game);
+      }
     }
 
     // Advance a tap-to-snap camera animation, if one is in flight.
@@ -446,7 +604,32 @@ export function initScene(
       controls.update(); // advances two-finger/mouse damping inertia
     }
 
-    syncSnake();
+    // While the death tumble plays, IT owns the segment meshes and
+    // syncSnake stays out; any other time state is the boss. A restart
+    // (status back to running) cancels the tumble.
+    if (deathTumble && game.status === "running") deathTumble = null;
+    if (deathTumble) {
+      deathTumble.age += dt;
+      if (deathTumble.age < 1.6) {
+        for (const seg of deathTumble.segments) {
+          seg.velocity.y -= 12 * dt; // gravity
+          seg.mesh.position.addScaledVector(seg.velocity, dt);
+          seg.mesh.rotation.x += seg.spin.x * dt;
+          seg.mesh.rotation.y += seg.spin.y * dt;
+          seg.mesh.rotation.z += seg.spin.z * dt;
+        }
+      }
+    } else {
+      syncSnake();
+    }
+
+    // Advance and prune transient effects.
+    for (let i = effects.length - 1; i >= 0; i--) {
+      if (!effects[i].update(dt)) {
+        effects[i].dispose();
+        effects.splice(i, 1);
+      }
+    }
 
     // Food: position from state; the bob and spin are pure decoration,
     // driven by elapsed time — renderer-side state the game knows nothing
@@ -455,6 +638,13 @@ export function initScene(
     const [fx, fy, fz] = cellToWorld(game.food);
     food.position.set(fx, fy + Math.sin(elapsed * 2.5) * 0.12, fz);
     food.rotation.y = elapsed * 1.2;
+
+    // Keep the drop-line hanging from the (bobbing) food to the floor.
+    if (dropLine && dropMarker) {
+      dropLine.position.copy(food.position);
+      dropLine.scale.y = food.position.y + bounds / 2;
+      dropMarker.position.set(fx, -bounds / 2 + 0.02, fz);
+    }
 
     // Death indicator, minimum viable edition: the arena flushes red.
     // The living shell hints at the wall mode — teal walls teleport.
@@ -509,23 +699,51 @@ export function initScene(
 
     // Tell React only when something it displays has changed.
     if (game.score !== lastScore) {
+      // Score went UP = something was eaten just now, at the head's cell.
+      // (Down means a restart reset it — no celebration for that.)
+      if (game.score > lastScore && lastScore >= 0) {
+        spawnEatPop(new THREE.Vector3(...cellToWorld(game.snake[0])));
+      }
       lastScore = game.score;
       events.onScore(game.score);
     }
     if (game.status !== lastStatus) {
       lastStatus = game.status;
-      events.onStatus(game.status);
+      if (game.status === "dead") {
+        // Kick off the tumble now; tell React later so the animation
+        // isn't hidden behind the game-over overlay.
+        startDeathTumble();
+        deathNotifyIn = DEATH_OVERLAY_DELAY;
+      } else {
+        deathNotifyIn = null;
+        events.onStatus(game.status);
+      }
+    }
+    if (deathNotifyIn !== null) {
+      deathNotifyIn -= dt;
+      if (deathNotifyIn <= 0) {
+        deathNotifyIn = null;
+        events.onStatus("dead");
+      }
     }
 
     renderer.render(scene, camera);
     gizmo.render(); // corner viewport, drawn on top
   });
 
-  // Keep the image un-stretched when the window resizes.
+  // Keep the image un-stretched when the window resizes — and reframe:
+  // a rotation from landscape to portrait changes which dimension
+  // constrains the fit, so the camera re-seats itself at the new fitting
+  // distance (keeping its orbit direction).
   const onResize = () => {
     camera.aspect = container.clientWidth / container.clientHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(container.clientWidth, container.clientHeight);
+    const fit = fitDistance();
+    controls.maxDistance = fit * 2.2;
+    tmpOffset.copy(camera.position).sub(controls.target).setLength(fit);
+    camera.position.copy(controls.target).add(tmpOffset);
+    camera.lookAt(controls.target);
   };
   window.addEventListener("resize", onResize);
 
@@ -555,5 +773,5 @@ export function initScene(
     container.removeChild(renderer.domElement);
   };
 
-  return { restart, dispose };
+  return { restart, togglePause, dispose };
 }

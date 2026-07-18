@@ -51,6 +51,47 @@ body {
   opacity: 0.9;
 }
 
+.pause-button {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(16px, env(safe-area-inset-right));
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(30, 41, 59, 0.55);
+  color: #e2e8f0;
+  font: inherit;
+  font-size: 15px;
+  letter-spacing: -0.08em;
+  pointer-events: auto;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+
+.pause-button:active {
+  background: rgba(51, 65, 85, 0.85);
+}
+
+/* Informational only — pointer-events stay off so the canvas beneath
+   remains fully interactive (free camera while paused). */
+.paused-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(11, 14, 20, 0.35);
+}
+
+.paused-title {
+  color: #93c5fd;
+}
+
 .game-over {
   position: absolute;
   inset: 0;

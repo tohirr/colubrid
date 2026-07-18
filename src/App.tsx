@@ -32,9 +32,11 @@ function App() {
   const [score, setScore] = useState(0);
   const [best, setBest] = useState(loadBest);
   const [status, setStatus] = useState<GameStatus>("running");
+  const [paused, setPaused] = useState(false);
 
   useEffect(() => {
     const scene = initScene(containerRef.current!, {
+      onPause: setPaused,
       onScore: (s) => {
         setScore(s);
         // Functional update: this callback fires from the render loop,
@@ -63,6 +65,26 @@ function App() {
           score {score}
           <span className="best">best {best}</span>
         </div>
+        {status === "running" && (
+          <button
+            className="pause-button"
+            aria-label={paused ? "resume" : "pause"}
+            onClick={() => sceneRef.current?.togglePause()}
+          >
+            {paused ? "▶" : "II"}
+          </button>
+        )}
+        {/* Deliberately NOT a tap-anywhere-to-resume overlay: while paused
+            the canvas stays interactive, so you can orbit and inspect the
+            arena freely. Resume via the ▶ button or the P key. */}
+        {paused && status === "running" && (
+          <div className="paused-overlay">
+            <span className="game-over-title paused-title">paused</span>
+            <span className="game-over-hint">
+              ▶ or P resumes · look around freely
+            </span>
+          </div>
+        )}
         {status === "dead" && (
           <button
             className="game-over"
