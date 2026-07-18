@@ -45,7 +45,7 @@ export const WALL_WARN_SECONDS = 1;
 // arena wall-to-wall — so its position reads as an intersection against
 // the floor and walls. This is only the DEFAULT: the ⌖ button in the HUD
 // toggles it while playing.
-export const FOOD_GUIDE_LINES = true;
+export const FOOD_GUIDE_LINES = false;
 
 // Wall behavior — flip to taste, everything else adapts:
 //   "solid"  → touching a wall is game over (classic hard mode)

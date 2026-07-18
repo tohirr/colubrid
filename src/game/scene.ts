@@ -37,6 +37,11 @@ export interface SceneEvents {
   onScore: (score: number) => void;
   onStatus: (status: GameStatus) => void;
   onPause: (paused: boolean) => void;
+  // Fired the moment the player actually drives the camera themselves
+  // (OrbitControls' own "start" event — real mouse/two-finger input, never
+  // the automated demo pan below). React uses this to cut the orbit-hint
+  // demo short the instant it's served its purpose.
+  onOrbitEngaged: () => void;
 }
 
 // ...and how React talks INTO the 3D world: the handle initScene returns.
@@ -44,6 +49,7 @@ export interface SceneHandle {
   restart: () => void;
   togglePause: () => void;
   setGuideLines: (on: boolean) => void;
+  setDemoOrbit: (active: boolean) => void;
   dispose: () => void;
 }
 
@@ -59,6 +65,9 @@ export function initScene(
   // Arena span in world units — camera framing and arena visuals all
   // derive from this, so changing GRID_SIZE rescales everything.
   const bounds = GRID_SIZE * CELL;
+  // Radians/sec for the onboarding auto-pan — slow enough to read as a
+  // deliberate demonstration, not a spin.
+  const DEMO_ORBIT_SPEED = 0.35;
 
   // 2. The CAMERA. Pulled back far enough to frame the whole arena FOR
   //    THE CURRENT SCREEN SHAPE, slightly above the horizon so the floor
@@ -120,6 +129,14 @@ export function initScene(
   // zooms.
   controls.touches.ONE = null as unknown as THREE.TOUCH;
   controls.touches.TWO = THREE.TOUCH.DOLLY_ROTATE;
+  // "start" fires only from OrbitControls' own pointer handling — real
+  // mouse/two-finger input — never from the automated demo pan (that
+  // drives camera.position directly, bypassing these listeners).
+  const onControlsStart = () => {
+    demoOrbitActive = false;
+    events.onOrbitEngaged();
+  };
+  controls.addEventListener("start", onControlsStart);
 
   // ---- THE ARENA ----------------------------------------------------
   // A GRID_SIZE³ lattice of cells. Mostly empty space — what we draw are
@@ -274,6 +291,23 @@ export function initScene(
   const guideGroup = new THREE.Group();
   guideGroup.add(guideX, guideY, guideZ, guideDot);
   scene.add(guideGroup);
+
+  // ALIGNMENT BEAM: independent of the toggleable guide lines above (and
+  // visible even with those off, which is the default) — a short green
+  // line drawn directly from the head to the food whenever they share two
+  // of their three grid coordinates, i.e. the snake could reach it by
+  // moving straight along the remaining axis.
+  const beamGeometry = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(),
+    new THREE.Vector3(),
+  ]);
+  const beam = new THREE.LineSegments(
+    beamGeometry,
+    new THREE.LineBasicMaterial({ color: GUIDE_ALIGNED_COLOR }),
+  );
+  beam.visible = false;
+  beam.frustumCulled = false;
+  scene.add(beam);
   // ----------------------------------------------------------------------
 
   let game = createGame();
@@ -363,6 +397,9 @@ export function initScene(
   // actual position each update, so the two coexist.
   const spherical = new THREE.Spherical();
   const tmpOffset = new THREE.Vector3();
+  // The auto-pan demo (see setDemoOrbit below) also drives the camera
+  // through orbitBy, from the animate loop rather than a user gesture.
+  let demoOrbitActive = false;
   const orbitBy = (dTheta: number, dPhi: number) => {
     snapAnim = null; // manual control overrides any snap in flight
     tmpOffset.copy(camera.position).sub(controls.target);
@@ -423,6 +460,8 @@ export function initScene(
     e.stopPropagation();
     e.preventDefault();
     gizmoDrag = { x: e.clientX, y: e.clientY, travel: 0 };
+    demoOrbitActive = false;
+    events.onOrbitEngaged();
   };
   const onPointerMove = (e: PointerEvent) => {
     if (!gizmoDrag) return;
@@ -613,6 +652,8 @@ export function initScene(
         .add(tmpOffset.setFromSpherical(spherical));
       camera.lookAt(controls.target);
       if (snapAnim.t >= 1) snapAnim = null;
+    } else if (demoOrbitActive) {
+      orbitBy(dt * DEMO_ORBIT_SPEED, 0); // slow onboarding pan
     } else {
       controls.update(); // advances two-finger/mouse damping inertia
     }
@@ -676,6 +717,38 @@ export function initScene(
       (guideZ.material as THREE.LineBasicMaterial).color.set(
         alignedZ ? GUIDE_ALIGNED_COLOR : GUIDE_COLOR,
       );
+    }
+
+    // Head-to-food beam: on whenever the head lines up with the food along
+    // exactly one axis (sharing the other two grid coordinates).
+    {
+      const head = game.snake[0];
+      const sameX = head.x === game.food.x;
+      const sameY = head.y === game.food.y;
+      const sameZ = head.z === game.food.z;
+      const aligned =
+        (sameX && sameY && !sameZ) ||
+        (sameX && sameZ && !sameY) ||
+        (sameY && sameZ && !sameX);
+      beam.visible = aligned;
+      if (aligned) {
+        const headMesh = snakeGroup.children[0];
+        const positions = beamGeometry.attributes
+          .position as THREE.BufferAttribute;
+        positions.setXYZ(
+          0,
+          headMesh.position.x,
+          headMesh.position.y,
+          headMesh.position.z,
+        );
+        positions.setXYZ(
+          1,
+          food.position.x,
+          food.position.y,
+          food.position.z,
+        );
+        positions.needsUpdate = true;
+      }
     }
 
     // Death indicator, minimum viable edition: the arena flushes red.
@@ -785,6 +858,7 @@ export function initScene(
     window.removeEventListener("pointerdown", onPointerDown, true);
     window.removeEventListener("pointermove", onPointerMove, true);
     window.removeEventListener("pointerup", onPointerUp, true);
+    controls.removeEventListener("start", onControlsStart);
     controls.dispose(); // unhooks its mouse/touch listeners
     gizmo.dispose();
     window.removeEventListener("resize", onResize);
@@ -810,6 +884,9 @@ export function initScene(
     togglePause,
     setGuideLines: (on: boolean) => {
       guidesOn = on;
+    },
+    setDemoOrbit: (active: boolean) => {
+      demoOrbitActive = active;
     },
     dispose,
   };
