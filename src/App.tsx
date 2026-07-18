@@ -140,7 +140,7 @@ function App() {
         {isTouchDevice && orbitHintPlaying && (
           <div className="orbit-hint-caption" onClick={stopOrbitHint}>
             <span className="orbit-hint-text">
-              swipe with two fingers to orbit
+              use two fingers to orbit or zoom the cube
             </span>
           </div>
         )}
