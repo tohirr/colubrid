@@ -41,10 +41,11 @@ export function speedForScore(score: number): number {
 // speed, so a faster game automatically warns further ahead.
 export const WALL_WARN_SECONDS = 1;
 
-// Depth cue: a thin line from the food straight down to the floor, with a
-// dot where it lands — reads the food's height and floor position at a
-// glance. Matter of taste; flip it off for a cleaner arena.
-export const FOOD_DROP_LINE = false;
+// Depth cue: guide lines through the food — one per axis, spanning the
+// arena wall-to-wall — so its position reads as an intersection against
+// the floor and walls. This is only the DEFAULT: the ⌖ button in the HUD
+// toggles it while playing.
+export const FOOD_GUIDE_LINES = true;
 
 // Wall behavior — flip to taste, everything else adapts:
 //   "solid"  → touching a wall is game over (classic hard mode)

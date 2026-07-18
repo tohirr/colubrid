@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { FOOD_GUIDE_LINES } from "./game/config";
 import { initScene, type SceneHandle } from "./game/scene";
 import type { GameStatus } from "./game/state";
 
@@ -33,6 +34,7 @@ function App() {
   const [best, setBest] = useState(loadBest);
   const [status, setStatus] = useState<GameStatus>("running");
   const [paused, setPaused] = useState(false);
+  const [guides, setGuides] = useState(FOOD_GUIDE_LINES);
 
   useEffect(() => {
     const scene = initScene(containerRef.current!, {
@@ -65,15 +67,32 @@ function App() {
           score {score}
           <span className="best">best {best}</span>
         </div>
-        {status === "running" && (
+        <div className="hud-buttons">
+          {/* Guide-lines toggle: a display preference, so it lives in
+              React state and is merely pushed down to the scene. */}
           <button
-            className="pause-button"
-            aria-label={paused ? "resume" : "pause"}
-            onClick={() => sceneRef.current?.togglePause()}
+            className="hud-button"
+            aria-label="toggle food guide lines"
+            aria-pressed={guides}
+            onClick={() =>
+              setGuides((g) => {
+                sceneRef.current?.setGuideLines(!g);
+                return !g;
+              })
+            }
           >
-            {paused ? "▶" : "II"}
+            ⌖
           </button>
-        )}
+          {status === "running" && (
+            <button
+              className="hud-button"
+              aria-label={paused ? "resume" : "pause"}
+              onClick={() => sceneRef.current?.togglePause()}
+            >
+              {paused ? "▶" : "II"}
+            </button>
+          )}
+        </div>
         {/* Deliberately NOT a tap-anywhere-to-resume overlay: while paused
             the canvas stays interactive, so you can orbit and inspect the
             arena freely. Resume via the ▶ button or the P key. */}

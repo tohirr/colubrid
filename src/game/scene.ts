@@ -3,7 +3,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import {
   GRID_SIZE,
   CELL,
-  FOOD_DROP_LINE,
+  FOOD_GUIDE_LINES,
   WALL_MODE,
   WALL_WARN_SECONDS,
   cellToWorld,
@@ -43,6 +43,7 @@ export interface SceneEvents {
 export interface SceneHandle {
   restart: () => void;
   togglePause: () => void;
+  setGuideLines: (on: boolean) => void;
   dispose: () => void;
 }
 
@@ -224,43 +225,52 @@ export function initScene(
   );
   scene.add(food);
 
-  // The DROP-LINE (optional, see config): a thin vertical line from the
-  // food to the floor plus a dot where it lands. The dot gives you the
-  // food's floor position, the line's length gives you its height — the
-  // two readings that a lone floating object can't communicate. The line
-  // is a unit segment (0,0,0)→(0,-1,0) that we position at the food and
-  // stretch with scale.y, so per-frame updates touch no geometry.
-  let dropLine: THREE.LineSegments | null = null;
-  let dropMarker: THREE.Mesh | null = null;
-  if (FOOD_DROP_LINE) {
-    const lineGeometry = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(0, 0, 0),
-      new THREE.Vector3(0, -1, 0),
-    ]);
-    dropLine = new THREE.LineSegments(
-      lineGeometry,
-      new THREE.LineBasicMaterial({
-        color: 0xb45309,
-        transparent: true,
-        opacity: 0.6,
-      }),
+  // GUIDE LINES (toggleable, default in config): three axis-aligned lines
+  // through the food, each spanning the arena wall to wall, plus a dot on
+  // the floor. The food's position reads as an intersection: the vertical
+  // line pins it on the floor grid, the horizontal ones pin it on the
+  // walls. Each line is a UNIT segment stretched to the arena via scale,
+  // so per-frame updates are three position writes — no geometry edits.
+  let guidesOn = FOOD_GUIDE_LINES;
+  const guideMaterial = new THREE.LineBasicMaterial({
+    color: 0xb45309,
+    transparent: true,
+    opacity: 0.5,
+  });
+  const makeGuide = (a: THREE.Vector3, b: THREE.Vector3) =>
+    new THREE.LineSegments(
+      new THREE.BufferGeometry().setFromPoints([a, b]),
+      guideMaterial,
     );
-    scene.add(dropLine);
-
-    const marker = new THREE.Mesh(
-      new THREE.CircleGeometry(CELL * 0.3, 20),
-      new THREE.MeshBasicMaterial({
-        color: 0xf59e0b,
-        transparent: true,
-        opacity: 0.45,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-      }),
-    );
-    marker.rotation.x = -Math.PI / 2; // lie flat on the floor
-    scene.add(marker);
-    dropMarker = marker;
-  }
+  const guideX = makeGuide(
+    new THREE.Vector3(-0.5, 0, 0),
+    new THREE.Vector3(0.5, 0, 0),
+  );
+  guideX.scale.x = bounds;
+  const guideY = makeGuide(
+    new THREE.Vector3(0, -0.5, 0),
+    new THREE.Vector3(0, 0.5, 0),
+  );
+  guideY.scale.y = bounds;
+  const guideZ = makeGuide(
+    new THREE.Vector3(0, 0, -0.5),
+    new THREE.Vector3(0, 0, 0.5),
+  );
+  guideZ.scale.z = bounds;
+  const guideDot = new THREE.Mesh(
+    new THREE.CircleGeometry(CELL * 0.3, 20),
+    new THREE.MeshBasicMaterial({
+      color: 0xf59e0b,
+      transparent: true,
+      opacity: 0.45,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    }),
+  );
+  guideDot.rotation.x = -Math.PI / 2; // lie flat on the floor
+  const guideGroup = new THREE.Group();
+  guideGroup.add(guideX, guideY, guideZ, guideDot);
+  scene.add(guideGroup);
   // ----------------------------------------------------------------------
 
   let game = createGame();
@@ -639,11 +649,13 @@ export function initScene(
     food.position.set(fx, fy + Math.sin(elapsed * 2.5) * 0.12, fz);
     food.rotation.y = elapsed * 1.2;
 
-    // Keep the drop-line hanging from the (bobbing) food to the floor.
-    if (dropLine && dropMarker) {
-      dropLine.position.copy(food.position);
-      dropLine.scale.y = food.position.y + bounds / 2;
-      dropMarker.position.set(fx, -bounds / 2 + 0.02, fz);
+    // Keep the guide lines crossing at the (bobbing) food.
+    guideGroup.visible = guidesOn;
+    if (guidesOn) {
+      guideX.position.set(0, food.position.y, food.position.z);
+      guideY.position.set(food.position.x, 0, food.position.z);
+      guideZ.position.set(food.position.x, food.position.y, 0);
+      guideDot.position.set(fx, -bounds / 2 + 0.02, fz);
     }
 
     // Death indicator, minimum viable edition: the arena flushes red.
@@ -773,5 +785,12 @@ export function initScene(
     container.removeChild(renderer.domElement);
   };
 
-  return { restart, togglePause, dispose };
+  return {
+    restart,
+    togglePause,
+    setGuideLines: (on: boolean) => {
+      guidesOn = on;
+    },
+    dispose,
+  };
 }

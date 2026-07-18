@@ -51,10 +51,16 @@ body {
   opacity: 0.9;
 }
 
-.pause-button {
+.hud-buttons {
   position: absolute;
   top: max(12px, env(safe-area-inset-top));
   right: max(16px, env(safe-area-inset-right));
+  display: flex;
+  gap: 10px;
+  pointer-events: auto;
+}
+
+.hud-button {
   width: 44px;
   height: 44px;
   border-radius: 50%;
@@ -64,15 +70,19 @@ body {
   font: inherit;
   font-size: 15px;
   letter-spacing: -0.08em;
-  pointer-events: auto;
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
   touch-action: manipulation;
 }
 
-.pause-button:active {
+.hud-button:active {
   background: rgba(51, 65, 85, 0.85);
+}
+
+/* Toggles read their state at a glance: dimmed when off. */
+.hud-button[aria-pressed="false"] {
+  opacity: 0.45;
 }
 
 /* Informational only — pointer-events stay off so the canvas beneath
