@@ -232,15 +232,18 @@ export function initScene(
   // walls. Each line is a UNIT segment stretched to the arena via scale,
   // so per-frame updates are three position writes — no geometry edits.
   let guidesOn = FOOD_GUIDE_LINES;
-  const guideMaterial = new THREE.LineBasicMaterial({
-    color: 0xb45309,
-    transparent: true,
-    opacity: 0.5,
-  });
+  const GUIDE_COLOR = 0xb45309;
+  const GUIDE_ALIGNED_COLOR = 0x22c55e;
+  const makeGuideMaterial = () =>
+    new THREE.LineBasicMaterial({
+      color: GUIDE_COLOR,
+      transparent: true,
+      opacity: 0.5,
+    });
   const makeGuide = (a: THREE.Vector3, b: THREE.Vector3) =>
     new THREE.LineSegments(
       new THREE.BufferGeometry().setFromPoints([a, b]),
-      guideMaterial,
+      makeGuideMaterial(),
     );
   const guideX = makeGuide(
     new THREE.Vector3(-0.5, 0, 0),
@@ -656,6 +659,23 @@ export function initScene(
       guideY.position.set(food.position.x, 0, food.position.z);
       guideZ.position.set(food.position.x, food.position.y, 0);
       guideDot.position.set(fx, -bounds / 2 + 0.02, fz);
+
+      // A guide line turns green when the head shares the food's other two
+      // grid coordinates — i.e. the snake is lined up to reach it along
+      // that single axis.
+      const head = game.snake[0];
+      const alignedX = head.y === game.food.y && head.z === game.food.z;
+      const alignedY = head.x === game.food.x && head.z === game.food.z;
+      const alignedZ = head.x === game.food.x && head.y === game.food.y;
+      (guideX.material as THREE.LineBasicMaterial).color.set(
+        alignedX ? GUIDE_ALIGNED_COLOR : GUIDE_COLOR,
+      );
+      (guideY.material as THREE.LineBasicMaterial).color.set(
+        alignedY ? GUIDE_ALIGNED_COLOR : GUIDE_COLOR,
+      );
+      (guideZ.material as THREE.LineBasicMaterial).color.set(
+        alignedZ ? GUIDE_ALIGNED_COLOR : GUIDE_COLOR,
+      );
     }
 
     // Death indicator, minimum viable edition: the arena flushes red.
