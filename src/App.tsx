@@ -99,6 +99,20 @@ function App() {
           <span className="best">best {best}</span>
         </div>
         <div className="hud-buttons">
+          {isTouchDevice && (
+            <button
+              className="hud-button"
+              aria-label={
+                orbitHintPlaying ? "stop orbit hint" : "show orbit hint"
+              }
+              aria-pressed={orbitHintPlaying}
+              onClick={() =>
+                orbitHintPlaying ? stopOrbitHint() : playOrbitHint()
+              }
+            >
+              i
+            </button>
+          )}
           {status === "running" && (
             <button
               className="hud-button"
@@ -126,18 +140,6 @@ function App() {
               use two fingers to orbit or zoom the cube
             </span>
           </div>
-        )}
-        {isTouchDevice && (
-          <button
-            className="hud-button orbit-hint-toggle"
-            aria-label={orbitHintPlaying ? "stop orbit hint" : "show orbit hint"}
-            aria-pressed={orbitHintPlaying}
-            onClick={() =>
-              orbitHintPlaying ? stopOrbitHint() : playOrbitHint()
-            }
-          >
-            i
-          </button>
         )}
         {status === "dead" && (
           <button
