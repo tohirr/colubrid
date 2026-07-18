@@ -3,7 +3,6 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import {
   GRID_SIZE,
   CELL,
-  FOOD_GUIDE_LINES,
   WALL_MODE,
   WALL_WARN_SECONDS,
   cellToWorld,
@@ -48,7 +47,6 @@ export interface SceneEvents {
 export interface SceneHandle {
   restart: () => void;
   togglePause: () => void;
-  setGuideLines: (on: boolean) => void;
   setDemoOrbit: (active: boolean) => void;
   dispose: () => void;
 }
@@ -242,72 +240,34 @@ export function initScene(
   );
   scene.add(food);
 
-  // GUIDE LINES (toggleable, default in config): three axis-aligned lines
-  // through the food, each spanning the arena wall to wall, plus a dot on
-  // the floor. The food's position reads as an intersection: the vertical
-  // line pins it on the floor grid, the horizontal ones pin it on the
-  // walls. Each line is a UNIT segment stretched to the arena via scale,
-  // so per-frame updates are three position writes — no geometry edits.
-  let guidesOn = FOOD_GUIDE_LINES;
-  const GUIDE_COLOR = 0xb45309;
+  // ALIGNMENT PLANES — always on, the only depth cue for the food's
+  // position: a translucent plane per axis, spanning the arena
+  // wall-to-wall through the food. A plane lights up whenever the head
+  // shares that ONE axis's coordinate with the food — the snake is
+  // somewhere on the food's layer along that axis.
   const GUIDE_ALIGNED_COLOR = 0x22c55e;
-  const makeGuideMaterial = () =>
-    new THREE.LineBasicMaterial({
-      color: GUIDE_COLOR,
-      transparent: true,
-      opacity: 0.5,
-    });
-  const makeGuide = (a: THREE.Vector3, b: THREE.Vector3) =>
-    new THREE.LineSegments(
-      new THREE.BufferGeometry().setFromPoints([a, b]),
-      makeGuideMaterial(),
+  const makeGuidePlane = (rotation: THREE.Euler) => {
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(bounds, bounds),
+      new THREE.MeshBasicMaterial({
+        color: GUIDE_ALIGNED_COLOR,
+        transparent: true,
+        opacity: 0.05,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      }),
     );
-  const guideX = makeGuide(
-    new THREE.Vector3(-0.5, 0, 0),
-    new THREE.Vector3(0.5, 0, 0),
-  );
-  guideX.scale.x = bounds;
-  const guideY = makeGuide(
-    new THREE.Vector3(0, -0.5, 0),
-    new THREE.Vector3(0, 0.5, 0),
-  );
-  guideY.scale.y = bounds;
-  const guideZ = makeGuide(
-    new THREE.Vector3(0, 0, -0.5),
-    new THREE.Vector3(0, 0, 0.5),
-  );
-  guideZ.scale.z = bounds;
-  const guideDot = new THREE.Mesh(
-    new THREE.CircleGeometry(CELL * 0.3, 20),
-    new THREE.MeshBasicMaterial({
-      color: 0xf59e0b,
-      transparent: true,
-      opacity: 0.45,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-    }),
-  );
-  guideDot.rotation.x = -Math.PI / 2; // lie flat on the floor
-  const guideGroup = new THREE.Group();
-  guideGroup.add(guideX, guideY, guideZ, guideDot);
-  scene.add(guideGroup);
-
-  // ALIGNMENT BEAM: independent of the toggleable guide lines above (and
-  // visible even with those off, which is the default) — a short green
-  // line drawn directly from the head to the food whenever they share two
-  // of their three grid coordinates, i.e. the snake could reach it by
-  // moving straight along the remaining axis.
-  const beamGeometry = new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(),
-    new THREE.Vector3(),
-  ]);
-  const beam = new THREE.LineSegments(
-    beamGeometry,
-    new THREE.LineBasicMaterial({ color: GUIDE_ALIGNED_COLOR }),
-  );
-  beam.visible = false;
-  beam.frustumCulled = false;
-  scene.add(beam);
+    mesh.rotation.copy(rotation);
+    mesh.visible = false;
+    scene.add(mesh);
+    return mesh;
+  };
+  // Perpendicular to X (spans Y-Z) — lights up when head.x === food.x.
+  const planeX = makeGuidePlane(new THREE.Euler(0, Math.PI / 2, 0));
+  // Perpendicular to Y (spans X-Z, lies flat like the floor) — head.y === food.y.
+  const planeY = makeGuidePlane(new THREE.Euler(-Math.PI / 2, 0, 0));
+  // Perpendicular to Z (spans X-Y, the default plane orientation) — head.z === food.z.
+  const planeZ = makeGuidePlane(new THREE.Euler(0, 0, 0));
   // ----------------------------------------------------------------------
 
   let game = createGame();
@@ -685,70 +645,28 @@ export function initScene(
       }
     }
 
-    // Food: position from state; the bob and spin are pure decoration,
-    // driven by elapsed time — renderer-side state the game knows nothing
-    // about, exactly like the meshes themselves.
+    // Food: position from state; the bob, spin, and pulse are pure
+    // decoration, driven by elapsed time — renderer-side state the game
+    // knows nothing about, exactly like the meshes themselves.
     const elapsed = timer.getElapsed();
     const [fx, fy, fz] = cellToWorld(game.food);
     food.position.set(fx, fy + Math.sin(elapsed * 2.5) * 0.12, fz);
     food.rotation.y = elapsed * 1.2;
+    const pulse = 0.5 + 0.5 * Math.sin(elapsed * 4);
+    food.scale.setScalar(1 + pulse * 0.5);
+    (food.material as THREE.MeshStandardMaterial).emissiveIntensity =
+      0.4 + pulse * 0.8;
 
-    // Keep the guide lines crossing at the (bobbing) food.
-    guideGroup.visible = guidesOn;
-    if (guidesOn) {
-      guideX.position.set(0, food.position.y, food.position.z);
-      guideY.position.set(food.position.x, 0, food.position.z);
-      guideZ.position.set(food.position.x, food.position.y, 0);
-      guideDot.position.set(fx, -bounds / 2 + 0.02, fz);
-
-      // A guide line turns green when the head shares the food's other two
-      // grid coordinates — i.e. the snake is lined up to reach it along
-      // that single axis.
-      const head = game.snake[0];
-      const alignedX = head.y === game.food.y && head.z === game.food.z;
-      const alignedY = head.x === game.food.x && head.z === game.food.z;
-      const alignedZ = head.x === game.food.x && head.y === game.food.y;
-      (guideX.material as THREE.LineBasicMaterial).color.set(
-        alignedX ? GUIDE_ALIGNED_COLOR : GUIDE_COLOR,
-      );
-      (guideY.material as THREE.LineBasicMaterial).color.set(
-        alignedY ? GUIDE_ALIGNED_COLOR : GUIDE_COLOR,
-      );
-      (guideZ.material as THREE.LineBasicMaterial).color.set(
-        alignedZ ? GUIDE_ALIGNED_COLOR : GUIDE_COLOR,
-      );
-    }
-
-    // Head-to-food beam: on whenever the head lines up with the food along
-    // exactly one axis (sharing the other two grid coordinates).
+    // Alignment planes — always on, one lights up per axis on a
+    // single-coordinate match with the food (see declaration above).
     {
       const head = game.snake[0];
-      const sameX = head.x === game.food.x;
-      const sameY = head.y === game.food.y;
-      const sameZ = head.z === game.food.z;
-      const aligned =
-        (sameX && sameY && !sameZ) ||
-        (sameX && sameZ && !sameY) ||
-        (sameY && sameZ && !sameX);
-      beam.visible = aligned;
-      if (aligned) {
-        const headMesh = snakeGroup.children[0];
-        const positions = beamGeometry.attributes
-          .position as THREE.BufferAttribute;
-        positions.setXYZ(
-          0,
-          headMesh.position.x,
-          headMesh.position.y,
-          headMesh.position.z,
-        );
-        positions.setXYZ(
-          1,
-          food.position.x,
-          food.position.y,
-          food.position.z,
-        );
-        positions.needsUpdate = true;
-      }
+      planeX.position.set(food.position.x, 0, 0);
+      planeY.position.set(0, food.position.y, 0);
+      planeZ.position.set(0, 0, food.position.z);
+      planeX.visible = head.x === game.food.x;
+      planeY.visible = head.y === game.food.y;
+      planeZ.visible = head.z === game.food.z;
     }
 
     // Death indicator, minimum viable edition: the arena flushes red.
@@ -882,9 +800,6 @@ export function initScene(
   return {
     restart,
     togglePause,
-    setGuideLines: (on: boolean) => {
-      guidesOn = on;
-    },
     setDemoOrbit: (active: boolean) => {
       demoOrbitActive = active;
     },

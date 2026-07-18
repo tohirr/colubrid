@@ -41,12 +41,6 @@ export function speedForScore(score: number): number {
 // speed, so a faster game automatically warns further ahead.
 export const WALL_WARN_SECONDS = 1;
 
-// Depth cue: guide lines through the food — one per axis, spanning the
-// arena wall-to-wall — so its position reads as an intersection against
-// the floor and walls. This is only the DEFAULT: the ⌖ button in the HUD
-// toggles it while playing.
-export const FOOD_GUIDE_LINES = false;
-
 // Wall behavior — flip to taste, everything else adapts:
 //   "solid"  → touching a wall is game over (classic hard mode)
 //   "portal" → the snake exits one face and re-enters the opposite one,

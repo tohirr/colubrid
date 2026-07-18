@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FOOD_GUIDE_LINES } from "./game/config";
 import { initScene, type SceneHandle } from "./game/scene";
 import type { GameStatus } from "./game/state";
 
@@ -34,7 +33,6 @@ function App() {
   const [best, setBest] = useState(loadBest);
   const [status, setStatus] = useState<GameStatus>("running");
   const [paused, setPaused] = useState(false);
-  const [guides, setGuides] = useState(FOOD_GUIDE_LINES);
   // Two-finger orbit isn't discoverable on a touchscreen. On every load
   // there, the camera auto-pans for a few seconds with a caption
   // explaining the gesture — cut short the instant the player orbits for
@@ -101,21 +99,6 @@ function App() {
           <span className="best">best {best}</span>
         </div>
         <div className="hud-buttons">
-          {/* Guide-lines toggle: a display preference, so it lives in
-              React state and is merely pushed down to the scene. */}
-          <button
-            className="hud-button"
-            aria-label="toggle food guide lines"
-            aria-pressed={guides}
-            onClick={() =>
-              setGuides((g) => {
-                sceneRef.current?.setGuideLines(!g);
-                return !g;
-              })
-            }
-          >
-            ⌖
-          </button>
           {status === "running" && (
             <button
               className="hud-button"

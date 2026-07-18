@@ -42,10 +42,16 @@ body {
 /* max(..., env(safe-area-inset-*)) keeps HUD elements out of notches and
    home-indicator zones on phones; on desktop the inset is 0 and the plain
    padding wins. */
+/* Same top offset and box height as .hud-buttons (44px, the button
+   diameter) with flex centering, so the score text lines up with the
+   buttons' vertical center instead of sitting a few px above it. */
 .score {
   position: absolute;
-  top: max(16px, env(safe-area-inset-top));
+  top: max(12px, env(safe-area-inset-top));
   left: max(20px, env(safe-area-inset-left));
+  height: 44px;
+  display: flex;
+  align-items: center;
   font-size: 18px;
   letter-spacing: 0.08em;
   opacity: 0.9;
@@ -56,6 +62,7 @@ body {
   top: max(12px, env(safe-area-inset-top));
   right: max(16px, env(safe-area-inset-right));
   display: flex;
+  align-items: center;
   gap: 10px;
   pointer-events: auto;
 }
