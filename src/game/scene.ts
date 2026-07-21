@@ -224,8 +224,19 @@ export function initScene(
     CELL * 0.92,
     CELL * 0.92,
   );
-  const headMaterial = new THREE.MeshStandardMaterial({ color: 0x86efac });
-  const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x16a34a });
+  // A whisper of emissive keeps the snake readable even on faces no light
+  // reaches — the one object you must never lose track of can't go dark.
+  // Low intensity, so lit faces still dominate and shapes stay 3D.
+  const headMaterial = new THREE.MeshStandardMaterial({
+    color: 0x86efac,
+    emissive: 0x2f6b45,
+    emissiveIntensity: 0.35,
+  });
+  const bodyMaterial = new THREE.MeshStandardMaterial({
+    color: 0x16a34a,
+    emissive: 0x14532d,
+    emissiveIntensity: 0.3,
+  });
   const snakeGroup = new THREE.Group();
   scene.add(snakeGroup);
 
@@ -464,6 +475,7 @@ export function initScene(
       },
       scene,
       camera,
+      renderer,
       steerBySwipe,
       snapToAxis,
       gizmo,
@@ -571,6 +583,15 @@ export function initScene(
   const sun = new THREE.DirectionalLight(0xffffff, 2.0);
   sun.position.set(5, 8, 3);
   scene.add(sun);
+
+  // The RIM: a weaker, cooler light from the opposite corner. With a
+  // free-orbiting camera, half of all play happens looking at the sun's
+  // shadow side — this lifts that hemisphere into readability while the
+  // warm/cool difference keeps the two sides distinguishable (classic
+  // three-point lighting, minus the spotlight).
+  const rim = new THREE.DirectionalLight(0x9db8e8, 0.7);
+  rim.position.set(-5, 2, -4);
+  scene.add(rim);
 
   // TWO LOOPS, TWO SPEEDS. The render loop runs every frame (~60x/s).
   // The GAME advances only every TICK_SECONDS — we accumulate frame time

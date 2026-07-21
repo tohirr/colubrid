@@ -1,8 +1,15 @@
 # Colubrid 🐍
 
+![colubrid — snake, but the grid is a cube](public/og.png)
+
 A snake game with a twist: it's a full 3D volume, not a flat grid. You steer
 through a cube of space, chasing food and dodging your own tail, with a free
 orbiting camera so you can look at the arena from any angle.
+
+<p>
+  <img src="docs/screenshot-arena.png" width="49%" alt="The arena: a wireframe cube with the snake and the food gem, an alignment plane glowing where they share a coordinate" />
+  <img src="docs/screenshot-action.png" width="49%" alt="Up close: the snake bending through the volume toward the gem" />
+</p>
 
 This is a personal project — me messing around with Three.js and building
 little 3D block games for fun. Not trying to run it as a serious open source
