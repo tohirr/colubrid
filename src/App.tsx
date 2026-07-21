@@ -1,28 +1,35 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { initScene, type SceneHandle } from "./game/scene";
 import type { GameStatus } from "./game/state";
+import { playBest, setMuted as setAudioMuted } from "./game/audio";
 
-// React owns the PAGE: the HUD text, the game-over overlay, and now the
-// high score — persistence is a page concern, so localStorage lives here,
-// not in the game. Data flows out of the 3D world via SceneEvents
-// callbacks, and back into it via the SceneHandle.
+// React owns the PAGE: the HUD text, the overlays, and everything
+// persistent — localStorage is a page concern, so it lives here, not in
+// the game. Data flows out of the 3D world via SceneEvents callbacks, and
+// back into it via the SceneHandle.
 const BEST_KEY = "colubrid.best";
+const MUTED_KEY = "colubrid.muted";
+const INTRO_KEY = "colubrid.introSeen";
 
-function loadBest(): number {
-  // localStorage can throw (private browsing, disabled storage) — a high
-  // score is never worth crashing the game over.
+// The canonical link, for sharing. location.origin would say "localhost"
+// in dev — friends should always get the real address.
+const SHARE_URL = "https://colubrid.tohirr.xyz";
+
+// localStorage can throw (private browsing, disabled storage) — nothing
+// stored here is ever worth crashing the game over.
+function loadStored(key: string): string | null {
   try {
-    return Number(localStorage.getItem(BEST_KEY)) || 0;
+    return localStorage.getItem(key);
   } catch {
-    return 0;
+    return null;
   }
 }
 
-function saveBest(value: number) {
+function saveStored(key: string, value: string) {
   try {
-    localStorage.setItem(BEST_KEY, String(value));
+    localStorage.setItem(key, value);
   } catch {
-    // storage unavailable — the score just won't survive the session
+    // storage unavailable — the value just won't survive the session
   }
 }
 
@@ -30,9 +37,25 @@ function App() {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<SceneHandle | null>(null);
   const [score, setScore] = useState(0);
-  const [best, setBest] = useState(loadBest);
+  const [best, setBest] = useState(() => Number(loadStored(BEST_KEY)) || 0);
   const [status, setStatus] = useState<GameStatus>("running");
   const [paused, setPaused] = useState(false);
+  const [muted, setMuted] = useState(() => loadStored(MUTED_KEY) === "1");
+  // First visit only: an intro card explaining the controls, with the game
+  // held paused behind it until the player taps in. Returning players go
+  // straight to the snake.
+  const [introOpen, setIntroOpen] = useState(
+    () => loadStored(INTRO_KEY) !== "1",
+  );
+  // Share-button feedback when the Web Share sheet isn't available and we
+  // fall back to the clipboard.
+  const [shareCopied, setShareCopied] = useState(false);
+  // The new-best chime should ring once per run — the moment the record
+  // falls — not on every food after it. Refs, not state: these are read
+  // inside render-loop callbacks, and nothing on screen depends on them.
+  const bestRef = useRef(best);
+  const bestAnnouncedRef = useRef(false);
+
   // Two-finger orbit isn't discoverable on a touchscreen. On every load
   // there, the camera auto-pans for a few seconds with a caption
   // explaining the gesture — cut short the instant the player orbits for
@@ -63,18 +86,30 @@ function App() {
   }, [stopOrbitHint]);
 
   useEffect(() => {
+    setAudioMuted(muted);
+  }, [muted]);
+
+  useEffect(() => {
     const scene = initScene(containerRef.current!, {
       onPause: setPaused,
       onScore: (s) => {
         setScore(s);
-        // Functional update: this callback fires from the render loop,
-        // outside React's world, so read `best` through setState rather
-        // than closing over a stale value.
-        setBest((b) => {
-          if (s <= b) return b;
-          saveBest(s);
-          return s;
-        });
+        if (s === 0) {
+          // Restart — arm the chime for the new run.
+          bestAnnouncedRef.current = false;
+        } else if (
+          !bestAnnouncedRef.current &&
+          bestRef.current > 0 &&
+          s > bestRef.current
+        ) {
+          bestAnnouncedRef.current = true;
+          playBest();
+        }
+        if (s > bestRef.current) {
+          bestRef.current = s;
+          saveStored(BEST_KEY, String(s));
+          setBest(s);
+        }
       },
       onStatus: setStatus,
       // Idempotent even outside the demo (setDemoOrbit(false) when already
@@ -82,13 +117,51 @@ function App() {
       onOrbitEngaged: stopOrbitHint,
     });
     sceneRef.current = scene;
-    if (isTouchDevice) playOrbitHint();
+    if (loadStored(INTRO_KEY) !== "1") {
+      // First visit: hold the world still behind the intro card. Reading
+      // storage again (not the introOpen state) keeps this effect
+      // independent of render state — it runs once, on mount.
+      scene.setPaused(true);
+    } else if (isTouchDevice) {
+      playOrbitHint();
+    }
     return () => {
       if (orbitHintTimer.current !== null) clearTimeout(orbitHintTimer.current);
       sceneRef.current = null;
       scene.dispose();
     };
   }, [isTouchDevice, playOrbitHint, stopOrbitHint]);
+
+  const dismissIntro = () => {
+    saveStored(INTRO_KEY, "1");
+    setIntroOpen(false);
+    sceneRef.current?.setPaused(false);
+    // The dismissing tap doubles as the audio-unlock gesture, and the
+    // orbit demo makes more sense now that the arena is moving.
+    if (isTouchDevice) playOrbitHint();
+  };
+
+  const toggleMute = () => {
+    setMuted((m) => {
+      saveStored(MUTED_KEY, m ? "0" : "1");
+      return !m;
+    });
+  };
+
+  const shareScore = async () => {
+    const text = `I scored ${score} in colubrid 🐍 — beat that: ${SHARE_URL}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ text });
+      } else {
+        await navigator.clipboard.writeText(text);
+        setShareCopied(true);
+        window.setTimeout(() => setShareCopied(false), 1600);
+      }
+    } catch {
+      // share sheet dismissed / clipboard refused — nothing to clean up
+    }
+  };
 
   return (
     <div className="scene-wrap">
@@ -99,6 +172,14 @@ function App() {
           <span className="best">best {best}</span>
         </div>
         <div className="hud-buttons">
+          <button
+            className="hud-button"
+            aria-label={muted ? "unmute sound" : "mute sound"}
+            aria-pressed={!muted}
+            onClick={toggleMute}
+          >
+            ♪
+          </button>
           {isTouchDevice && (
             <button
               className="hud-button"
@@ -125,8 +206,9 @@ function App() {
         </div>
         {/* Deliberately NOT a tap-anywhere-to-resume overlay: while paused
             the canvas stays interactive, so you can orbit and inspect the
-            arena freely. Resume via the ▶ button or the P key. */}
-        {paused && status === "running" && (
+            arena freely. Resume via the ▶ button or the P key. The intro
+            card pauses the scene too — suppress this overlay under it. */}
+        {paused && status === "running" && !introOpen && (
           <div className="paused-overlay">
             <span className="game-over-title paused-title">paused</span>
             <span className="game-over-hint">
@@ -141,8 +223,36 @@ function App() {
             </span>
           </div>
         )}
+        {introOpen && (
+          <button className="intro" onClick={dismissIntro}>
+            <span className="intro-title">colubrid</span>
+            <span className="intro-tagline">snake, but the grid is a cube</span>
+            <span className="intro-rules">
+              {isTouchDevice ? (
+                <>
+                  swipe to steer — the snake goes the way it looks on screen
+                  <br />
+                  two fingers (or the corner cube) spin the view
+                </>
+              ) : (
+                <>
+                  arrows / WASD steer · space &amp; shift go up / down
+                  <br />
+                  drag to spin the view · P pauses
+                </>
+              )}
+            </span>
+            <span className="intro-rules intro-goal">
+              eat the glowing gem · a wall lights up when you share a
+              coordinate with it — line up all three
+            </span>
+            <span className="game-over-hint">
+              {isTouchDevice ? "tap to play" : "click anywhere to play"}
+            </span>
+          </button>
+        )}
         {status === "dead" && (
-          <button
+          <div
             className="game-over"
             onClick={() => sceneRef.current?.restart()}
           >
@@ -150,8 +260,18 @@ function App() {
             <span className="game-over-score">
               score {score} · best {best}
             </span>
+            <button
+              className="share-button"
+              onClick={(e) => {
+                // The whole overlay restarts on tap — sharing shouldn't.
+                e.stopPropagation();
+                void shareScore();
+              }}
+            >
+              {shareCopied ? "copied!" : "share score"}
+            </button>
             <span className="game-over-hint">tap — or press R — to restart</span>
-          </button>
+          </div>
         )}
       </div>
     </div>

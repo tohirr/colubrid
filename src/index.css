@@ -147,6 +147,73 @@ body {
   }
 }
 
+/* First-visit intro card. A full-screen button (tap anywhere = play),
+   same visual language as the game-over overlay but calmer. */
+.intro {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 0 28px;
+  background: rgba(11, 14, 20, 0.72);
+  border: none;
+  font: inherit;
+  color: inherit;
+  text-align: center;
+  pointer-events: auto;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.intro-title {
+  font-size: 42px;
+  letter-spacing: 0.12em;
+  color: #86efac;
+}
+
+.intro-tagline {
+  font-size: 15px;
+  opacity: 0.75;
+  margin-bottom: 10px;
+}
+
+.intro-rules {
+  font-size: 14px;
+  line-height: 1.7;
+  opacity: 0.9;
+  max-width: 34em;
+}
+
+.intro-goal {
+  color: #fcd34d;
+  opacity: 0.85;
+  margin-bottom: 10px;
+}
+
+.share-button {
+  margin: 6px 0;
+  padding: 10px 22px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  background: rgba(30, 41, 59, 0.75);
+  color: #e2e8f0;
+  font: inherit;
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.share-button:active {
+  background: rgba(51, 65, 85, 0.9);
+}
+
 .game-over {
   position: absolute;
   inset: 0;

@@ -19,6 +19,7 @@ import { attachInput, type MoveIntent } from "./input";
 import { attachTouch } from "./touch";
 import { AXIS_DIRECTIONS, pickDirection } from "./steering";
 import { createViewGizmo } from "./gizmo";
+import { playEat, playDeath } from "./audio";
 
 // Our whole 3D world is built once, inside App's mount effect — swapping this
 // module's code at runtime would update a function nobody calls again. So we
@@ -47,6 +48,7 @@ export interface SceneEvents {
 export interface SceneHandle {
   restart: () => void;
   togglePause: () => void;
+  setPaused: (paused: boolean) => void;
   setDemoOrbit: (active: boolean) => void;
   dispose: () => void;
 }
@@ -726,6 +728,7 @@ export function initScene(
       // (Down means a restart reset it — no celebration for that.)
       if (game.score > lastScore && lastScore >= 0) {
         spawnEatPop(new THREE.Vector3(...cellToWorld(game.snake[0])));
+        playEat(game.score);
       }
       lastScore = game.score;
       events.onScore(game.score);
@@ -736,6 +739,7 @@ export function initScene(
         // Kick off the tumble now; tell React later so the animation
         // isn't hidden behind the game-over overlay.
         startDeathTumble();
+        playDeath();
         deathNotifyIn = DEATH_OVERLAY_DELAY;
       } else {
         deathNotifyIn = null;
@@ -759,12 +763,24 @@ export function initScene(
   // constrains the fit, so the camera re-seats itself at the new fitting
   // distance (keeping its orbit direction).
   const onResize = () => {
+    // A hidden or mid-layout container can report 0×0; the math below
+    // would turn that into aspect = 0/0 = NaN, and a NaN camera position
+    // never recovers (every further operation keeps it NaN). Skip until
+    // there's a real size to fit.
+    if (container.clientWidth === 0 || container.clientHeight === 0) return;
     camera.aspect = container.clientWidth / container.clientHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(container.clientWidth, container.clientHeight);
     const fit = fitDistance();
     controls.maxDistance = fit * 2.2;
-    tmpOffset.copy(camera.position).sub(controls.target).setLength(fit);
+    tmpOffset.copy(camera.position).sub(controls.target);
+    // Recover if the camera was already poisoned (e.g. a resize that DID
+    // slip through at 0×0 before this guard existed): re-seat it on the
+    // default 3/4 view instead of normalizing a NaN vector.
+    if (!Number.isFinite(tmpOffset.lengthSq()) || tmpOffset.lengthSq() === 0) {
+      tmpOffset.set(1.1, 0.8, 1.35);
+    }
+    tmpOffset.setLength(fit);
     camera.position.copy(controls.target).add(tmpOffset);
     camera.lookAt(controls.target);
   };
@@ -800,6 +816,7 @@ export function initScene(
   return {
     restart,
     togglePause,
+    setPaused,
     setDemoOrbit: (active: boolean) => {
       demoOrbitActive = active;
     },
