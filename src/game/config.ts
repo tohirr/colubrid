@@ -46,7 +46,7 @@ export function speedForScore(score: number): number {
 // 1. The eat zone. Early food is "big": the snake eats by getting NEAR it
 //    (Chebyshev distance ≤ radius — a cube-shaped zone, 3³ cells at radius
 //    1), not by hitting the exact cell. After a few foods, exact hits only.
-export const EAT_RADIUS_UNTIL_FOOD = 5;
+export const EAT_RADIUS_UNTIL_FOOD = 10;
 export function eatRadiusForScore(score: number): number {
   return score < EAT_RADIUS_UNTIL_FOOD ? 1 : 0;
 }
