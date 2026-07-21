@@ -17,6 +17,11 @@ Built with React, Three.js, and TypeScript.
 
 Or run it locally — see Setup below.
 
+It's also an installable web app: on your phone, open the link and pick
+**Add to Home Screen** (Android offers it in the browser menu; on iOS it's
+in Safari's share sheet). You get a proper app icon and the game opens
+full-screen without browser chrome.
+
 ### Controls
 
 | Action | Keyboard | Touch |
@@ -26,6 +31,10 @@ Or run it locally — see Setup below.
 | Pause | `P` or `Esc` | Tap the pause button |
 | Restart after game over | `R` | Tap the game-over screen |
 | Orbit / zoom camera | Drag / scroll with mouse | Drag with two fingers |
+| Mute / unmute sound | Tap the ♪ button | Tap the ♪ button |
+
+The first visit shows a quick how-to-play card, and the game-over screen has
+a share button for challenging friends.
 
 Score by eating food; the snake speeds up as your score climbs. By default,
 crossing an edge of the arena wraps you to the opposite side (only running
@@ -63,6 +72,8 @@ pnpm preview  # preview the production build locally
   - `input.ts` / `touch.ts` — keyboard and touch input
   - `steering.ts` — turning the snake's heading
   - `gizmo.ts` — the on-screen orientation cube
+  - `audio.ts` — sound effects, synthesized with the Web Audio API (no
+    audio files)
 
 Game logic works in integer grid cells; only the scene layer converts cells
 to world-space positions. Worth keeping that split if you add something —
