@@ -2,6 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { initScene, type SceneHandle } from "./game/scene";
 import type { GameStatus } from "./game/state";
 import { playBest, setMuted as setAudioMuted } from "./game/audio";
+import { fireConfetti } from "./confetti";
+import {
+  getPlayerId,
+  submitScore,
+  type LeaderboardResult,
+} from "./leaderboard";
 
 // React owns the PAGE: the HUD text, the overlays, and everything
 // persistent — localStorage is a page concern, so it lives here, not in
@@ -50,11 +56,21 @@ function App() {
   // Share-button feedback when the Web Share sheet isn't available and we
   // fall back to the clipboard.
   const [shareCopied, setShareCopied] = useState(false);
+  // The global top 10, shown on the game-over screen — but ONLY when this
+  // player is on it. null = not fetched / not good enough / backend away.
+  const [leaderboard, setLeaderboard] = useState<LeaderboardResult | null>(
+    null,
+  );
   // The new-best chime should ring once per run — the moment the record
   // falls — not on every food after it. Refs, not state: these are read
   // inside render-loop callbacks, and nothing on screen depends on them.
   const bestRef = useRef(best);
   const bestAnnouncedRef = useRef(false);
+  const scoreRef = useRef(0);
+  // What "best" was when the current run began — the confetti condition.
+  // bestRef can't serve here: it rises DURING the run, and beating a
+  // record you set two seconds ago isn't a new record.
+  const runStartBestRef = useRef(best);
 
   // Two-finger orbit isn't discoverable on a touchscreen. On every load
   // there, the camera auto-pans for a few seconds with a caption
@@ -94,9 +110,11 @@ function App() {
       onPause: setPaused,
       onScore: (s) => {
         setScore(s);
+        scoreRef.current = s;
         if (s === 0) {
-          // Restart — arm the chime for the new run.
+          // Restart — arm the chime and record the target to beat.
           bestAnnouncedRef.current = false;
+          runStartBestRef.current = bestRef.current;
         } else if (
           !bestAnnouncedRef.current &&
           bestRef.current > 0 &&
@@ -111,7 +129,23 @@ function App() {
           setBest(s);
         }
       },
-      onStatus: setStatus,
+      onStatus: (st) => {
+        setStatus(st);
+        if (st === "dead") {
+          const s = scoreRef.current;
+          // Beat the record you WALKED IN with (not one set mid-run) →
+          // celebrate. Timed with the overlay, so the confetti frames
+          // the final score.
+          if (s > 0 && s > runStartBestRef.current) fireConfetti();
+          // Report the game either way — plays are counted server-side
+          // even at score 0. The board only renders if we're on it.
+          void submitScore(getPlayerId(), s).then((r) => {
+            if (r && r.rank !== null && r.rank <= 10) setLeaderboard(r);
+          });
+        } else {
+          setLeaderboard(null); // stale standings die with the restart
+        }
+      },
       // Idempotent even outside the demo (setDemoOrbit(false) when already
       // off) — safe to call always.
       onOrbitEngaged: stopOrbitHint,
@@ -260,6 +294,22 @@ function App() {
             <span className="game-over-score">
               score {score} · best {best}
             </span>
+            {leaderboard && (
+              <ol className="lb">
+                {leaderboard.top.map((entry, i) => (
+                  <li
+                    key={i}
+                    className={entry.you ? "lb-row lb-you" : "lb-row"}
+                  >
+                    <span className="lb-rank">{i + 1}</span>
+                    <span className="lb-name">
+                      {entry.emoji} {entry.you ? "You" : entry.name}
+                    </span>
+                    <span className="lb-score">{entry.score}</span>
+                  </li>
+                ))}
+              </ol>
+            )}
             <button
               className="share-button"
               onClick={(e) => {

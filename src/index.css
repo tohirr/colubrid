@@ -194,6 +194,48 @@ body {
   margin-bottom: 10px;
 }
 
+/* The top-10 list on the game-over screen — only rendered when the player
+   made the board. */
+.lb {
+  list-style: none;
+  margin: 8px 0;
+  padding: 12px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: min(300px, 78vw);
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 14px;
+}
+
+.lb-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 14px;
+  opacity: 0.8;
+}
+
+.lb-rank {
+  width: 1.6em;
+  text-align: right;
+  opacity: 0.55;
+}
+
+.lb-name {
+  flex: 1;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lb-you {
+  color: #86efac;
+  opacity: 1;
+}
+
 .share-button {
   margin: 6px 0;
   padding: 10px 22px;

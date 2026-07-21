@@ -36,6 +36,27 @@ full-screen without browser chrome.
 The first visit shows a quick how-to-play card, and the game-over screen has
 a share button for challenging friends.
 
+### Leaderboard
+
+There's a global top 10, shown on the game-over screen only when you make
+it onto it. No accounts: every browser gets a random id in localStorage,
+and the server derives an anonymous gamer name + emoji from it (you see
+yourself as "You"; everyone else sees your generated name).
+
+The backend is one serverless function ([`api/score.ts`](api/score.ts))
+backed by Upstash Redis. To enable it on a Vercel deployment: add the
+**Upstash Redis** integration from the Vercel Marketplace (free tier),
+connect it to the project, and redeploy — the function picks up the
+injected env vars (`UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`
+or the `KV_REST_API_*` pair) automatically. Without them the endpoint
+returns 503 and the game simply skips the leaderboard, so local dev
+(`pnpm dev`) is unaffected.
+
+Light analytics come for free from the same data: `player:{id}` hashes
+hold per-player play counts and first/last-seen timestamps, and
+`plays:{date}` counters track games per day — browse them in the Upstash
+data browser.
+
 Score by eating food; the snake speeds up as your score climbs. By default,
 crossing an edge of the arena wraps you to the opposite side (only running
 into yourself ends the game) — see `WALL_MODE` in
