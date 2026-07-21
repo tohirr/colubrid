@@ -83,6 +83,13 @@ function App() {
       typeof window !== "undefined" &&
       !!window.matchMedia?.("(pointer: coarse)").matches,
   );
+  // OS "reduce motion" setting: skip the AUTO-playing camera demo (the
+  // (i) button still replays it on request — that's user-initiated).
+  const [reducedMotion] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches,
+  );
   const [orbitHintPlaying, setOrbitHintPlaying] = useState(false);
   const orbitHintTimer = useRef<number | null>(null);
 
@@ -138,9 +145,10 @@ function App() {
           // the final score.
           if (s > 0 && s > runStartBestRef.current) fireConfetti();
           // Report the game either way — plays are counted server-side
-          // even at score 0. The board only renders if we're on it.
+          // even at score 0. Rendering decides between the full board
+          // (top 10) and the one-line rank tease (below it).
           void submitScore(getPlayerId(), s).then((r) => {
-            if (r && r.rank !== null && r.rank <= 10) setLeaderboard(r);
+            if (r && r.rank !== null) setLeaderboard(r);
           });
         } else {
           setLeaderboard(null); // stale standings die with the restart
@@ -156,7 +164,7 @@ function App() {
       // storage again (not the introOpen state) keeps this effect
       // independent of render state — it runs once, on mount.
       scene.setPaused(true);
-    } else if (isTouchDevice) {
+    } else if (isTouchDevice && !reducedMotion) {
       playOrbitHint();
     }
     return () => {
@@ -172,7 +180,7 @@ function App() {
     sceneRef.current?.setPaused(false);
     // The dismissing tap doubles as the audio-unlock gesture, and the
     // orbit demo makes more sense now that the arena is moving.
-    if (isTouchDevice) playOrbitHint();
+    if (isTouchDevice && !reducedMotion) playOrbitHint();
   };
 
   const toggleMute = () => {
@@ -294,21 +302,29 @@ function App() {
             <span className="game-over-score">
               score {score} · best {best}
             </span>
-            {leaderboard && (
-              <ol className="lb">
-                {leaderboard.top.map((entry, i) => (
-                  <li
-                    key={i}
-                    className={entry.you ? "lb-row lb-you" : "lb-row"}
-                  >
-                    <span className="lb-rank">{i + 1}</span>
-                    <span className="lb-name">
-                      {entry.emoji} {entry.you ? "You" : entry.name}
-                    </span>
-                    <span className="lb-score">{entry.score}</span>
-                  </li>
-                ))}
-              </ol>
+            {leaderboard && leaderboard.rank !== null && (
+              leaderboard.rank <= 10 ? (
+                <ol className="lb">
+                  {leaderboard.top.map((entry, i) => (
+                    <li
+                      key={i}
+                      className={entry.you ? "lb-row lb-you" : "lb-row"}
+                    >
+                      <span className="lb-rank">{i + 1}</span>
+                      <span className="lb-name">
+                        {entry.emoji} {entry.you ? "You" : entry.name}
+                      </span>
+                      <span className="lb-score">{entry.score}</span>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                // Off the board: no list, just a quiet target to chase.
+                <span className="lb-tease">
+                  #{leaderboard.rank} of all players · top 10 starts at{" "}
+                  {leaderboard.top[leaderboard.top.length - 1]?.score}
+                </span>
+              )
             )}
             <button
               className="share-button"

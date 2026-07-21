@@ -737,6 +737,9 @@ export function initScene(
       if (game.score > lastScore && lastScore >= 0) {
         spawnEatPop(new THREE.Vector3(...cellToWorld(game.snake[0])));
         playEat(game.score);
+        // Haptics where supported (Android; iOS browsers ignore it) — a
+        // short tap for a bite. `?.` because desktop lacks it entirely.
+        navigator.vibrate?.(15);
       }
       lastScore = game.score;
       events.onScore(game.score);
@@ -748,6 +751,7 @@ export function initScene(
         // isn't hidden behind the game-over overlay.
         startDeathTumble();
         playDeath();
+        navigator.vibrate?.([60, 40, 90]); // a stumble, not a tap
         deathNotifyIn = DEATH_OVERLAY_DELAY;
       } else {
         deathNotifyIn = null;

@@ -236,6 +236,14 @@ body {
   opacity: 1;
 }
 
+/* Shown instead of the list when the player is ranked but outside the
+   top 10 — a target, not a wall of strangers. */
+.lb-tease {
+  font-size: 13px;
+  opacity: 0.6;
+  margin: 2px 0;
+}
+
 .share-button {
   margin: 6px 0;
   padding: 10px 22px;

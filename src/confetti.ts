@@ -19,6 +19,10 @@ interface Piece {
 }
 
 export function fireConfetti(): void {
+  // The OS-level "reduce motion" setting is exactly about effects like
+  // this one — honor it. The new-best chime still plays, so the moment
+  // isn't lost.
+  if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
   if (!ctx) return;

@@ -19,8 +19,13 @@ Or run it locally — see Setup below.
 
 It's also an installable web app: on your phone, open the link and pick
 **Add to Home Screen** (Android offers it in the browser menu; on iOS it's
-in Safari's share sheet). You get a proper app icon and the game opens
-full-screen without browser chrome.
+in Safari's share sheet). You get a proper app icon, the game opens
+full-screen without browser chrome, and after the first visit it's cached
+by a service worker — launches are instant and work fully offline (the
+leaderboard naturally needs a connection).
+
+Sound note for iPhones: the ring/silent switch mutes web audio, so if the
+game seems silent on iOS, check the switch before blaming the ♪ button.
 
 ### Controls
 
