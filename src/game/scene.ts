@@ -6,6 +6,7 @@ import {
   WALL_MODE,
   WALL_WARN_SECONDS,
   cellToWorld,
+  eatRadiusForScore,
   speedForScore,
   type Cell,
 } from "./config";
@@ -241,6 +242,11 @@ export function initScene(
     }),
   );
   scene.add(food);
+  // The food is drawn at the size of its EAT ZONE (the beginner ramp makes
+  // early food a 3³ target — see eatRadiusForScore), so what you see is
+  // honestly what you can hit. Eased so the shrink is a transition, not a
+  // pop.
+  let foodZoneScale = 1 + 2 * eatRadiusForScore(0);
 
   // ALIGNMENT PLANES — always on, the only depth cue for the food's
   // position: a translucent plane per axis, spanning the arena
@@ -655,7 +661,9 @@ export function initScene(
     food.position.set(fx, fy + Math.sin(elapsed * 2.5) * 0.12, fz);
     food.rotation.y = elapsed * 1.2;
     const pulse = 0.5 + 0.5 * Math.sin(elapsed * 4);
-    food.scale.setScalar(1 + pulse * 0.5);
+    const zoneTarget = 1 + 2 * eatRadiusForScore(game.score);
+    foodZoneScale += (zoneTarget - foodZoneScale) * Math.min(1, dt * 3);
+    food.scale.setScalar((1 + pulse * 0.5) * foodZoneScale);
     (food.material as THREE.MeshStandardMaterial).emissiveIntensity =
       0.4 + pulse * 0.8;
 

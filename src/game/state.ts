@@ -1,4 +1,11 @@
-import { GRID_SIZE, WALL_MODE, isInsideGrid, type Cell } from "./config";
+import {
+  GRID_SIZE,
+  WALL_MODE,
+  eatRadiusForScore,
+  foodSpawnRangeForScore,
+  isInsideGrid,
+  type Cell,
+} from "./config";
 
 // Pure game logic — no Three.js, no DOM, no timers. Just data and the
 // rules for advancing it one tick. You could run this in a terminal or a
@@ -39,7 +46,7 @@ export function createGame(): GameState {
     snake,
     direction: { x: 1, y: 0, z: 0 },
     queuedDirection: null,
-    food: randomEmptyCell(snake),
+    food: randomEmptyCell(snake, snake[0], foodSpawnRangeForScore(0)),
     score: 0,
     status: "running",
     deathCause: null,
@@ -54,17 +61,40 @@ function isReversal(a: Cell, b: Cell): boolean {
   return a.x === -b.x && a.y === -b.y && a.z === -b.z;
 }
 
-// Rejection sampling: roll random cells until one is free. With a 13³ grid
-// (2197 cells) and a snake dozens long, misses are rare — this only gets
+// Chebyshev (chessboard) distance: the number of steps a king would take.
+// "Within distance r" describes a CUBE of cells, which is exactly the
+// shape of the beginner-friendly eat zone.
+function chebyshev(a: Cell, b: Cell): number {
+  return Math.max(
+    Math.abs(a.x - b.x),
+    Math.abs(a.y - b.y),
+    Math.abs(a.z - b.z),
+  );
+}
+
+// Rejection sampling: roll random cells until one qualifies. Cells are
+// rolled within `range` of `near` (the head), so early food spawns a short
+// walk away — see foodSpawnRangeForScore. Misses are rare; this only gets
 // slow if the snake ever fills a meaningful fraction of the arena.
-function randomEmptyCell(occupied: Cell[]): Cell {
+function randomEmptyCell(occupied: Cell[], near: Cell, range: number): Cell {
+  const r = Math.min(range, GRID_SIZE - 1);
+  const roll = () => Math.floor(Math.random() * (2 * r + 1)) - r;
   while (true) {
-    const c: Cell = {
-      x: Math.floor(Math.random() * GRID_SIZE),
-      y: Math.floor(Math.random() * GRID_SIZE),
-      z: Math.floor(Math.random() * GRID_SIZE),
-    };
-    if (!occupied.some((o) => sameCell(o, c))) return c;
+    const c: Cell = { x: near.x + roll(), y: near.y + roll(), z: near.z + roll() };
+    if (WALL_MODE === "portal") {
+      // The arena wraps, so "near the head" legitimately includes cells
+      // just through a wall.
+      c.x = (c.x + GRID_SIZE) % GRID_SIZE;
+      c.y = (c.y + GRID_SIZE) % GRID_SIZE;
+      c.z = (c.z + GRID_SIZE) % GRID_SIZE;
+    } else if (!isInsideGrid(c)) {
+      continue;
+    }
+    // Never spawn inside (or right at the edge of) the current eat zone —
+    // food the snake swallows without steering isn't a reward, it's noise.
+    if (chebyshev(c, near) < 3) continue;
+    if (occupied.some((o) => sameCell(o, c))) continue;
+    return c;
   }
 }
 
@@ -109,7 +139,10 @@ export function tick(state: GameState): void {
     return;
   }
 
-  const ate = sameCell(next, state.food);
+  // Eating is proximity, not exactness, while the beginner ramp lasts:
+  // radius 1 means the food's whole 3³ neighborhood counts (the renderer
+  // draws the food big to match). Later scores demand the exact cell.
+  const ate = chebyshev(next, state.food) <= eatRadiusForScore(state.score);
 
   // Self-collision. Normally the tail tip vacates its cell this very tick,
   // so moving into it is legal — but when eating, the tail STAYS (that's
@@ -125,7 +158,11 @@ export function tick(state: GameState): void {
   if (ate) {
     // Growth is simply "don't pop the tail this tick."
     state.score += 1;
-    state.food = randomEmptyCell(state.snake);
+    state.food = randomEmptyCell(
+      state.snake,
+      next,
+      foodSpawnRangeForScore(state.score),
+    );
   } else {
     state.snake.pop();
   }
